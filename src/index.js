@@ -24,6 +24,34 @@ if (NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Inicialización perezosa para entornos serverless (Vercel)
+let initialized = false;
+let initPromise = null;
+const initialize = async () => {
+  // Probar conexión a la base de datos
+  const dbConnected = await testConnection();
+  if (!dbConnected) {
+    throw new Error('No se pudo conectar a la base de datos');
+  }
+
+  // Sincronizar modelos (sin forzar la recreación de tablas)
+  await syncModels(false);
+};
+
+// Asegurar inicialización antes de manejar cualquier petición
+app.use(async (req, res, next) => {
+  try {
+    if (!initialized) {
+      if (!initPromise) initPromise = initialize();
+      await initPromise;
+      initialized = true;
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Rutas de la API
 app.use('/api/productos', productoRoutes);
 app.use('/api/trabajadores', trabajadorRoutes);
@@ -62,44 +90,6 @@ app.use((error, req, res, next) => {
       ...(NODE_ENV === 'development' && { stack: error.stack })
     }
   });
-});
-
-// Inicializar el servidor
-const startServer = async () => {
-  try {
-    // Probar conexión a la base de datos
-    const dbConnected = await testConnection();
-    if (!dbConnected) {
-      throw new Error('No se pudo conectar a la base de datos');
-    }
-
-    // Sincronizar modelos (sin forzar la recreación de tablas)
-    await syncModels(false);
-
-    // Iniciar servidor
-    app.listen(PORT, () => {
-      console.log(`Servidor en ejecución en http://localhost:${PORT}`);
-      console.log(`Entorno: ${NODE_ENV}`);
-    });
-  } catch (error) {
-    console.error('Error al iniciar el servidor:', error);
-    process.exit(1);
-  }
-};
-
-// Iniciar la aplicación
-startServer();
-
-// Manejo de cierre de la aplicación
-process.on('SIGINT', async () => {
-  console.log('\nCerrando conexiones...');
-  const { sequelize } = require('./config/database');
-  if (sequelize) {
-    await sequelize.close();
-    console.log('Conexión a la base de datos cerrada.');
-  }
-  console.log('Saliendo...');
-  process.exit(0);
 });
 
 module.exports = app;
