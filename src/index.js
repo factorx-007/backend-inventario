@@ -28,26 +28,46 @@ if (NODE_ENV === 'development') {
 let initialized = false;
 let initPromise = null;
 const initialize = async () => {
-  // Probar conexión a la base de datos
-  const dbConnected = await testConnection();
-  if (!dbConnected) {
-    throw new Error('No se pudo conectar a la base de datos');
-  }
+  try {
+    console.log('Iniciando inicialización...');
+    // Probar conexión a la base de datos
+    console.log('Probando conexión a la base de datos...');
+    const dbConnected = await testConnection();
+    if (!dbConnected) {
+      throw new Error('No se pudo conectar a la base de datos');
+    }
+    console.log('Conexión a la base de datos exitosa');
 
-  // Sincronizar modelos (sin forzar la recreación de tablas)
-  await syncModels(false);
+    // Sincronizar modelos (sin forzar la recreación de tablas)
+    console.log('Sincronizando modelos...');
+    await syncModels(false);
+    console.log('Modelos sincronizados correctamente');
+  } catch (error) {
+    console.error('Error durante la inicialización:', error);
+    throw error; // Re-lanzar el error para manejarlo en el middleware
+  }
 };
 
 // Asegurar inicialización antes de manejar cualquier petición
 app.use(async (req, res, next) => {
   try {
+    console.log('Recibida petición a:', req.path);
     if (!initialized) {
-      if (!initPromise) initPromise = initialize();
+      console.log('Inicialización pendiente, iniciando...');
+      if (!initPromise) {
+        console.log('Creando promesa de inicialización...');
+        initPromise = initialize().catch(e => {
+          console.error('Error en inicialización:', e);
+          throw e;
+        });
+      }
       await initPromise;
+      console.log('Inicialización completada con éxito');
       initialized = true;
     }
     next();
   } catch (err) {
+    console.error('Error en middleware de inicialización:', err);
     next(err);
   }
 });
@@ -76,20 +96,37 @@ app.use((req, res, next) => {
 
 // Manejador de errores global
 app.use((error, req, res, next) => {
-  console.error('Error:', error);
+  console.error('Error en la aplicación:', {
+    message: error.message,
+    stack: error.stack,
+    code: error.code,
+    originalUrl: req.originalUrl,
+    method: req.method,
+    headers: req.headers
+  });
   
   const status = error.status || 500;
   const message = error.message || 'Error interno del servidor';
   
-  res.status(status).json({
+  // En producción, no exponer detalles del error
+  const errorResponse = {
     error: {
-      message,
+      message: status === 500 ? 'Error interno del servidor' : message,
       status,
-      timestamp: new Date().toISOString(),
-      path: req.originalUrl,
-      ...(NODE_ENV === 'development' && { stack: error.stack })
+      timestamp: new Date().toISOString()
     }
-  });
+  };
+
+  // Solo incluir detalles adicionales en desarrollo
+  if (NODE_ENV !== 'production') {
+    errorResponse.error.details = {
+      message: error.message,
+      stack: error.stack,
+      path: req.originalUrl
+    };
+  }
+  
+  res.status(status).json(errorResponse);
 });
 
 module.exports = app;
