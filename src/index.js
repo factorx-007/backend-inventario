@@ -1,4 +1,29 @@
+// Configurar manejo de errores no capturados
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+console.log('Iniciando la aplicación...');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('Directorio actual:', process.cwd());
+
 require('dotenv').config();
+
+// Verificar variables de entorno críticas
+const requiredEnvVars = ['DATABASE_URL'];
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.error('Faltan variables de entorno requeridas:', missingEnvVars.join(', '));
+  process.exit(1);
+}
+
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
