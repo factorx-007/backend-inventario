@@ -258,8 +258,8 @@ const actualizarDevolucion = async (req, res, next) => {
       // Cerrar el préstamo
       await PrestamoHerramienta.update(
         { 
-          estado: 'Cerrado',
-          fechaDevolucionFinal: new Date()
+          estado: 'completado',
+          fecha_devolucion_final: new Date()
         },
         { 
           where: { id },
